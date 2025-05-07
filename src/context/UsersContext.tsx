@@ -10,6 +10,7 @@ interface Message {
   timestamp: Date;
   type: "text" | "voice" | "document" | "image";
   fileUrl?: string;
+  sender?: User;
 }
 
 interface UsersContextType {
@@ -18,6 +19,7 @@ interface UsersContextType {
   getUserById: (id: string) => User | undefined;
   getMessages: (userId: string) => Message[];
   sendMessage: (receiverId: string, content: string, type: Message['type'], fileUrl?: string) => void;
+  getAllMessages: () => Message[];
 }
 
 // Mock messages for demo purposes
@@ -172,6 +174,25 @@ export const UsersProvider: React.FC<{ children: React.ReactNode }> = ({
     return messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   };
 
+  // Add this new function to get all messages
+  const getAllMessages = () => {
+    if (!user) return [];
+    
+    // Flatten all messages into a single array
+    const allMessages = Object.values(mockMessages).flat();
+    
+    // Add sender information to each message
+    const messagesWithSenders = allMessages.map(message => {
+      const sender = getUserById(message.senderId);
+      return { ...message, sender };
+    });
+    
+    // Filter messages for current user (sent to or received by)
+    return messagesWithSenders.filter(
+      message => message.senderId === user.id || message.receiverId === user.id
+    );
+  };
+
   const sendMessage = (receiverId: string, content: string, type: Message['type'], fileUrl?: string) => {
     if (!user) return;
     
@@ -201,6 +222,7 @@ export const UsersProvider: React.FC<{ children: React.ReactNode }> = ({
         getUserById,
         getMessages,
         sendMessage,
+        getAllMessages,
       }}
     >
       {children}

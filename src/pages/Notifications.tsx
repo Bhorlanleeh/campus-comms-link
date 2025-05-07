@@ -2,6 +2,7 @@
 import React from "react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
+import DesktopNav from "@/components/DesktopNav";
 import { useAuth } from "@/context/AuthContext";
 import { useUsers } from "@/context/UsersContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -20,7 +21,7 @@ const Notifications = () => {
   // Filter and sort notifications (newest first)
   const notifications = allMessages
     .filter(message => message.receiverId === user?.id)
-    .sort((a, b) => b.timestamp - a.timestamp);
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   
   const handleNotificationClick = (senderId: string) => {
     navigate(`/chat/${senderId}`);
@@ -28,6 +29,7 @@ const Notifications = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
+      <DesktopNav activeTab="notifications" />
       <Header 
         title="Notifications" 
         showAvatar 
@@ -55,7 +57,7 @@ const Notifications = () => {
                     <div className="flex justify-between">
                       <p className="font-medium">{sender?.fullName || "Unknown"}</p>
                       <span className="text-xs text-gray-500">
-                        {format(notification.timestamp, "h:mm a")}
+                        {format(new Date(notification.timestamp), "h:mm a")}
                       </span>
                     </div>
                     
@@ -67,7 +69,7 @@ const Notifications = () => {
                     </p>
                     
                     <p className="text-xs text-gray-400 mt-1">
-                      {format(notification.timestamp, "MMM d, yyyy")}
+                      {format(new Date(notification.timestamp), "MMM d, yyyy")}
                     </p>
                   </div>
                 </div>
