@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserUnit, useAuth } from "@/context/AuthContext";
-import { Loader } from "lucide-react";
+import { Loader, Eye, EyeOff } from "lucide-react";
 import Logo from "@/components/Logo";
 
 const Signup = () => {
@@ -25,6 +25,8 @@ const Signup = () => {
   const [unit, setUnit] = useState<UserUnit | "">("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -69,7 +71,7 @@ const Signup = () => {
     <div className="flex min-h-screen w-full">
       {/* Left side - Green background with logo */}
       <div className="hidden md:flex md:w-1/2 bg-smartAudit-green text-white items-center justify-center flex-col p-8">
-        <Logo size="lg" />
+        <Logo size="lg" white />
         <div className="text-center mt-8">
           <h2 className="text-4xl font-bold">Welcome to</h2>
           <h1 className="text-6xl font-bold mt-4">FUNAAB</h1>
@@ -88,7 +90,7 @@ const Signup = () => {
             <Logo size="md" />
           </div>
 
-          <Card className="border-none shadow-lg">
+          <Card className="border-none shadow-lg mb-8">
             <CardHeader className="space-y-1">
               <h2 className="text-2xl font-bold text-center">Create Account</h2>
             </CardHeader>
@@ -151,24 +153,50 @@ const Signup = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                   {passwordError && (
                     <p className="text-destructive text-sm">{passwordError}</p>
                   )}

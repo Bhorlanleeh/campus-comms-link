@@ -37,7 +37,7 @@ const Welcome = () => {
           <h2 className="text-4xl font-bold">Welcome to</h2>
           <h1 className="text-6xl font-bold mt-2">FUNAAB</h1>
           <h3 className="text-3xl font-medium mt-2">SmartAudit</h3>
-          <p className="mt-8 max-w-md">
+          <p className="mt-8 max-w-md px-4">
             A communication system for BURSARY, AUDIT, and REGISTRY units.
             Share documents and information seamlessly.
           </p>
@@ -60,7 +60,7 @@ const Welcome = () => {
           </Button>
         </div>
         
-        <p className="mt-12 text-sm opacity-80">
+        <p className="mt-12 text-sm opacity-80 text-center px-4">
           Powered by The Federal University of Agriculture, Abeokuta.
         </p>
       </div>
