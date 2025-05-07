@@ -1,23 +1,27 @@
 
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronLeft } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ChevronLeft, Home } from "lucide-react";
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
   showBackButton?: boolean;
+  showHomeButton?: boolean;
   showAvatar?: boolean;
   avatarFallback?: string;
+  avatarUrl?: string;
 }
 
 const Header = ({
   title,
   subtitle,
   showBackButton = false,
+  showHomeButton = false,
   showAvatar = false,
   avatarFallback,
+  avatarUrl,
 }: HeaderProps) => {
   const navigate = useNavigate();
 
@@ -28,16 +32,31 @@ const Header = ({
           <button
             onClick={() => navigate(-1)}
             className="mr-2 -ml-2 p-2 rounded-full hover:bg-gray-100"
+            aria-label="Go back"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
         )}
         
-        {showAvatar && avatarFallback && (
+        {showHomeButton && (
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="mr-2 p-2 rounded-full hover:bg-gray-100"
+            aria-label="Go to dashboard"
+          >
+            <Home className="h-5 w-5" />
+          </button>
+        )}
+        
+        {showAvatar && (
           <Avatar className="h-8 w-8 mr-3">
-            <AvatarFallback className="bg-smartAudit-green text-white">
-              {avatarFallback}
-            </AvatarFallback>
+            {avatarUrl ? (
+              <AvatarImage src={avatarUrl} />
+            ) : (
+              <AvatarFallback className="bg-smartAudit-green text-white">
+                {avatarFallback}
+              </AvatarFallback>
+            )}
           </Avatar>
         )}
         

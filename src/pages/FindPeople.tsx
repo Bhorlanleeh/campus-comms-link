@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useUsers } from "@/context/UsersContext";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search } from "lucide-react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
@@ -31,7 +31,7 @@ const FindPeople = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <DesktopNav activeTab="find" />
-      <Header title="Find People" />
+      <Header title="Find People" showBackButton showHomeButton />
       
       <div className="p-4 bg-white shadow-sm">
         <div className="relative">
@@ -55,9 +55,13 @@ const FindPeople = () => {
                 onClick={() => handleUserClick(otherUser.id)}
               >
                 <Avatar className="h-12 w-12 mr-3">
-                  <AvatarFallback className="bg-smartAudit-green text-white">
-                    {otherUser.fullName.split(" ").map(name => name[0]).join("")}
-                  </AvatarFallback>
+                  {otherUser.avatarUrl ? (
+                    <AvatarImage src={otherUser.avatarUrl} alt={otherUser.fullName} />
+                  ) : (
+                    <AvatarFallback className="bg-smartAudit-green text-white">
+                      {otherUser.fullName.split(" ").map(name => name[0]).join("")}
+                    </AvatarFallback>
+                  )}
                 </Avatar>
                 
                 <div className="flex flex-col">

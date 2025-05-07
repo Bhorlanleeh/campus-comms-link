@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -10,6 +9,7 @@ export interface User {
   email: string;
   position: string;
   unit: UserUnit;
+  avatarUrl?: string;
 }
 
 interface AuthContextType {
@@ -24,6 +24,7 @@ interface AuthContextType {
   }) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
+  updateUserAvatar: (file: File) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -186,6 +187,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const updateUserAvatar = async (file: File): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      setIsLoading(true);
+      
+      // Simulate API call delay
+      setTimeout(() => {
+        try {
+          if (!user) {
+            throw new Error("No user logged in");
+          }
+          
+          // In a real implementation, this would upload to Supabase storage
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const updatedUser = { 
+              ...user, 
+              avatarUrl: e.target?.result as string 
+            };
+            
+            // Update user in local state and localStorage
+            const userIndex = mockUsers.findIndex(u => u.id === user.id);
+            if (userIndex !== -1) {
+              mockUsers[userIndex] = updatedUser;
+            }
+            
+            setUser(updatedUser);
+            localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
+            setIsLoading(false);
+            resolve();
+          };
+          
+          reader.onerror = () => {
+            setIsLoading(false);
+            reject(new Error("Failed to read file"));
+          };
+          
+          reader.readAsDataURL(file);
+        } catch (error) {
+          setIsLoading(false);
+          reject(error);
+        }
+      }, 1000);
+    });
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem("smartAuditUser");
@@ -203,6 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         signup,
         logout,
         isLoading,
+        updateUserAvatar,
       }}
     >
       {children}
