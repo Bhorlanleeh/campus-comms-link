@@ -22,8 +22,8 @@ const Login = () => {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      // Force navigation to dashboard after successful login
-      window.location.href = '/dashboard';
+      // Force a complete page reload and navigate directly to dashboard
+      window.location.replace('/dashboard');
     } catch (error) {
       console.error("Login failed", error);
     } finally {
