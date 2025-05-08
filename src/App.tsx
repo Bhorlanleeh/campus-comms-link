@@ -38,12 +38,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AuthProvider>
-        <UsersProvider>
-          <BrowserRouter>
+    <AuthProvider>
+      <UsersProvider>
+        <BrowserRouter>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
             <Routes>
               {/* Public routes */}
               <Route path="/welcome" element={<Welcome />} />
@@ -112,10 +112,10 @@ const App = () => (
               {/* Catch-all route */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </BrowserRouter>
-        </UsersProvider>
-      </AuthProvider>
-    </TooltipProvider>
+          </TooltipProvider>
+        </BrowserRouter>
+      </UsersProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
