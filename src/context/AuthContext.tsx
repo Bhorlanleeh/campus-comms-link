@@ -1,5 +1,8 @@
+
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { uploadFile } from "@/utils/supabaseUtils";
 
 export type UserUnit = "AUDIT" | "REGISTRY" | "BURSARY";
 
@@ -29,7 +32,25 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demo purposes
+// Helper function to clean up auth state
+const cleanupAuthState = () => {
+  // Remove standard auth tokens
+  localStorage.removeItem('supabase.auth.token');
+  // Remove all Supabase auth keys from localStorage
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+      localStorage.removeItem(key);
+    }
+  });
+  // Remove from sessionStorage if in use
+  Object.keys(sessionStorage || {}).forEach((key) => {
+    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+      sessionStorage.removeItem(key);
+    }
+  });
+};
+
+// Mock users for fallback when not connected to Supabase
 const mockUsers: User[] = [
   {
     id: "1",
@@ -75,7 +96,7 @@ const mockUsers: User[] = [
   },
 ];
 
-// Mock user credentials for demo purposes
+// Mock credentials for fallback
 const mockCredentials: Record<string, string> = {
   "john@example.com": "password123",
   "jane@example.com": "password123",
@@ -93,38 +114,131 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check for stored user in localStorage
-    const storedUser = localStorage.getItem("smartAuditUser");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log("Auth state changed:", event);
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Get user profile data
+          setTimeout(() => {
+            fetchUserProfile(session.user.id);
+          }, 0);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+      }
+    );
+
+    // THEN check for existing session
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
+        } else {
+          // Fallback to stored user in localStorage when no active Supabase session
+          const storedUser = localStorage.getItem("smartAuditUser");
+          if (storedUser) {
+            setUser(JSON.parse(storedUser));
+          }
+        }
+      } catch (error) {
+        console.error("Error checking session:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkSession();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
+
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      // Get user profile from profiles table
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (profile) {
+        // Map profile data to User interface
+        const userData: User = {
+          id: profile.id,
+          fullName: profile.full_name,
+          email: '', // Email not stored in profiles table for security
+          position: profile.position,
+          unit: profile.unit as UserUnit,
+          avatarUrl: profile.avatar_url
+        };
+
+        setUser(userData);
+        localStorage.setItem("smartAuditUser", JSON.stringify(userData));
+      } else {
+        console.log("No profile found for user");
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Check if email exists in our mock data
-      const storedPassword = mockCredentials[email];
-      if (!storedPassword || storedPassword !== password) {
-        throw new Error("Invalid email or password");
+      // Clean up existing auth state
+      cleanupAuthState();
+      
+      // Attempt global sign out
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continue even if this fails
       }
 
-      // Find the user
-      const foundUser = mockUsers.find((u) => u.email === email);
-      if (!foundUser) {
-        throw new Error("User not found");
+      // Sign in with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        // Fall back to mock users if Supabase auth fails
+        console.warn("Supabase auth failed, falling back to mock users:", error);
+        
+        // Check if email exists in our mock data
+        const storedPassword = mockCredentials[email];
+        if (!storedPassword || storedPassword !== password) {
+          throw new Error("Invalid email or password");
+        }
+
+        // Find the user
+        const foundUser = mockUsers.find((u) => u.email === email);
+        if (!foundUser) {
+          throw new Error("User not found");
+        }
+
+        // Set the user in state and localStorage
+        setUser(foundUser);
+        localStorage.setItem("smartAuditUser", JSON.stringify(foundUser));
+      } else {
+        console.log("Supabase login successful:", data);
+        // User profile will be fetched via onAuthStateChange
       }
 
-      // Set the user in state and localStorage
-      setUser(foundUser);
-      localStorage.setItem("smartAuditUser", JSON.stringify(foundUser));
       toast({
         title: "Login successful",
-        description: `Welcome back, ${foundUser.fullName}!`,
+        description: "Welcome back!",
       });
     } catch (error) {
       toast({
@@ -147,30 +261,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }) => {
     setIsLoading(true);
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Clean up existing auth state
+      cleanupAuthState();
+      
+      // Sign up with Supabase
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          data: {
+            full_name: userData.fullName,
+          },
+        }
+      });
 
-      // Check if email is already used
-      if (mockCredentials[userData.email]) {
-        throw new Error("Email already exists");
+      if (authError) {
+        // Fall back to mock implementation if Supabase auth fails
+        console.warn("Supabase signup failed, falling back to mock implementation:", authError);
+        
+        // Check if email is already used in mock data
+        if (mockCredentials[userData.email]) {
+          throw new Error("Email already exists");
+        }
+
+        // Create new user
+        const newUser: User = {
+          id: `${mockUsers.length + 1}`,
+          fullName: userData.fullName,
+          email: userData.email,
+          position: userData.position,
+          unit: userData.unit,
+        };
+
+        // Add user to mock data
+        mockUsers.push(newUser);
+        mockCredentials[userData.email] = userData.password;
+
+        // Set the user in state and localStorage
+        setUser(newUser);
+        localStorage.setItem("smartAuditUser", JSON.stringify(newUser));
+      } else if (authData.user) {
+        console.log("Supabase signup successful:", authData);
+        
+        // Create a profile in the profiles table
+        const { error: profileError } = await supabase.from('profiles').insert({
+          id: authData.user.id,
+          full_name: userData.fullName,
+          position: userData.position,
+          unit: userData.unit,
+        });
+
+        if (profileError) {
+          console.error("Error creating profile:", profileError);
+          // Try to continue anyway
+        }
+        
+        // User data will be set via onAuthStateChange
       }
 
-      // Create new user
-      const newUser: User = {
-        id: `${mockUsers.length + 1}`,
-        fullName: userData.fullName,
-        email: userData.email,
-        position: userData.position,
-        unit: userData.unit,
-      };
-
-      // Add user to mock data (in a real app, this would be an API call)
-      mockUsers.push(newUser);
-      mockCredentials[userData.email] = userData.password;
-
-      // Set the user in state and localStorage
-      setUser(newUser);
-      localStorage.setItem("smartAuditUser", JSON.stringify(newUser));
       toast({
         title: "Account created",
         description: "You have successfully created an account!",
@@ -188,57 +336,97 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const updateUserAvatar = async (file: File): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      setIsLoading(true);
-      
-      // Simulate API call delay
-      setTimeout(() => {
-        try {
-          if (!user) {
-            throw new Error("No user logged in");
-          }
+    if (!user) {
+      throw new Error("No user logged in");
+    }
+
+    setIsLoading(true);
+    try {
+      // Try to upload to Supabase storage
+      try {
+        const filePath = `avatars/${user.id}`;
+        const fileUrl = await uploadFile('avatars', filePath, file);
+        
+        // Update profile in Supabase
+        const { error } = await supabase
+          .from('profiles')
+          .update({ avatar_url: fileUrl })
+          .eq('id', user.id);
           
-          // In a real implementation, this would upload to Supabase storage
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const updatedUser = { 
-              ...user, 
-              avatarUrl: e.target?.result as string 
-            };
-            
-            // Update user in local state and localStorage
-            const userIndex = mockUsers.findIndex(u => u.id === user.id);
-            if (userIndex !== -1) {
-              mockUsers[userIndex] = updatedUser;
-            }
-            
-            setUser(updatedUser);
-            localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
-            setIsLoading(false);
-            resolve();
-          };
-          
-          reader.onerror = () => {
-            setIsLoading(false);
-            reject(new Error("Failed to read file"));
-          };
-          
+        if (error) throw error;
+        
+        // Update local user state
+        const updatedUser = { ...user, avatarUrl: fileUrl };
+        setUser(updatedUser);
+        localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
+      } catch (error) {
+        console.error("Supabase storage upload failed, using fallback:", error);
+        
+        // Fallback to local storage
+        const reader = new FileReader();
+        
+        const fileReaderPromise = new Promise<string>((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = () => reject(new Error("Failed to read file"));
           reader.readAsDataURL(file);
-        } catch (error) {
-          setIsLoading(false);
-          reject(error);
+        });
+        
+        const dataUrl = await fileReaderPromise;
+        const updatedUser = { ...user, avatarUrl: dataUrl };
+        
+        // Update mock user in array
+        const userIndex = mockUsers.findIndex(u => u.id === user.id);
+        if (userIndex !== -1) {
+          mockUsers[userIndex] = updatedUser;
         }
-      }, 1000);
-    });
+        
+        // Update local state
+        setUser(updatedUser);
+        localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
+      }
+    } catch (error) {
+      console.error("Error updating avatar:", error);
+      toast({
+        title: "Update failed",
+        description: "Failed to update profile image",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("smartAuditUser");
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out.",
-    });
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      // Clean up auth state
+      cleanupAuthState();
+      
+      // Sign out from Supabase
+      await supabase.auth.signOut({ scope: 'global' });
+      
+      // Clear local state
+      setUser(null);
+      localStorage.removeItem("smartAuditUser");
+      
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+      
+      // Force a full page reload to clear any lingering state
+      window.location.href = '/welcome';
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Logout issue",
+        description: "There was a problem signing you out. Try clearing your browser cache.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

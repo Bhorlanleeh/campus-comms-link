@@ -53,7 +53,7 @@ const Welcome = () => {
           </Button>
           <Button
             variant="outline"
-            className="flex-1 border-white text-white hover:bg-white hover:text-smartAudit-green"
+            className="flex-1 border-white text-smartAudit-green bg-white hover:bg-smartAudit-green hover:text-white"
             onClick={() => navigate('/signup')}
           >
             Sign Up

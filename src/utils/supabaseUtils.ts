@@ -1,7 +1,5 @@
 
-// This file provides helper functions for interacting with Supabase
-// In a real implementation, you would import the Supabase client
-// and use it to interact with the Supabase API
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Upload a file to Supabase Storage
@@ -15,18 +13,41 @@ export const uploadFile = async (
   path: string,
   file: File
 ): Promise<string> => {
-  // In a real implementation, this would use the Supabase client:
-  // const { data, error } = await supabase.storage
-  //   .from(bucket)
-  //   .upload(path, file, { upsert: true });
+  // Try to create the bucket if it doesn't exist
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(b => b.name === bucket);
+    
+    if (!bucketExists) {
+      console.log(`Bucket '${bucket}' doesn't exist, attempting to create it`);
+      const { error } = await supabase.storage.createBucket(bucket, {
+        public: true
+      });
+      
+      if (error) {
+        console.error("Error creating bucket:", error);
+      }
+    }
+  } catch (error) {
+    console.error("Error checking/creating bucket:", error);
+  }
+
+  // Upload the file
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(path, file, { upsert: true });
   
-  // For now, we'll simulate the upload with a local data URL
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
+  if (error) {
+    console.error("Error uploading file:", error);
+    throw error;
+  }
+  
+  // Get the public URL
+  const { data: publicURL } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(data?.path || path);
+  
+  return publicURL.publicUrl;
 };
 
 /**
@@ -36,11 +57,8 @@ export const uploadFile = async (
  * @returns The public URL of the file
  */
 export const getFileUrl = (bucket: string, path: string): string => {
-  // In a real implementation, this would use the Supabase client:
-  // return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-  
-  // For now, we'll return a placeholder URL
-  return path;
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
 };
 
 /**
@@ -53,10 +71,6 @@ export const deleteFile = async (
   bucket: string,
   path: string
 ): Promise<boolean> => {
-  // In a real implementation, this would use the Supabase client:
-  // const { error } = await supabase.storage.from(bucket).remove([path]);
-  // return !error;
-  
-  // For now, we'll simulate a successful deletion
-  return Promise.resolve(true);
+  const { error } = await supabase.storage.from(bucket).remove([path]);
+  return !error;
 };
