@@ -33,11 +33,11 @@ const Welcome = () => {
       <div className="flex-1 flex flex-col items-center justify-center p-4 text-white">
         <Logo size="lg" white />
         
-        <div className="text-center mt-8">
+        <div className="text-center mt-4">
           <h2 className="text-4xl font-bold">Welcome to</h2>
           <h1 className="text-6xl font-bold mt-2">FUNAAB</h1>
           <h3 className="text-3xl font-medium mt-2">SmartAudit</h3>
-          <p className="mt-8 max-w-md px-4">
+          <p className="mt-6 max-w-md px-4">
             A communication system for BURSARY, AUDIT, and REGISTRY units.
             Share documents and information seamlessly.
           </p>
@@ -53,7 +53,7 @@ const Welcome = () => {
           </Button>
           <Button
             variant="outline"
-            className="flex-1 border-white text-smartAudit-green bg-white hover:bg-smartAudit-green hover:text-white"
+            className="flex-1 border-white bg-white text-smartAudit-green hover:bg-smartAudit-green hover:text-white"
             onClick={() => navigate('/signup')}
           >
             Sign Up
