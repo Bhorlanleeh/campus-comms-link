@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -17,17 +17,49 @@ import {
   Building,
   Upload,
   Home,
+  Loader2,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Profile = () => {
   const { user, logout, updateUserAvatar } = useAuth();
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(user?.avatarUrl);
+  
+  // Ensure we're showing the latest avatar URL from both Supabase and local storage
+  useEffect(() => {
+    const fetchCurrentAvatar = async () => {
+      if (!user) return;
+      
+      try {
+        // Try to get the avatar directly from Supabase as a check
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('avatar_url')
+          .eq('id', user.id)
+          .single();
+          
+        if (profile?.avatar_url) {
+          console.log("Found avatar URL in profile:", profile.avatar_url);
+          setAvatarUrl(profile.avatar_url);
+        } else {
+          console.log("Using avatar URL from user object:", user.avatarUrl);
+          setAvatarUrl(user.avatarUrl);
+        }
+      } catch (error) {
+        console.error("Error fetching avatar:", error);
+        // Fallback to the user object
+        setAvatarUrl(user.avatarUrl);
+      }
+    };
+    
+    fetchCurrentAvatar();
+  }, [user]);
 
   const handleLogout = () => {
     logout();
-    navigate("/login");
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,6 +90,9 @@ const Profile = () => {
     
     try {
       await updateUserAvatar(file);
+      // Update local state with the new avatar URL
+      setAvatarUrl(user?.avatarUrl);
+      
       toast({
         title: "Profile picture updated",
         description: "Your profile picture has been updated successfully",
@@ -88,8 +123,8 @@ const Profile = () => {
         <div className="flex flex-col items-center mb-8">
           <div className="relative">
             <Avatar className="h-24 w-24 mb-4">
-              {user.avatarUrl ? (
-                <AvatarImage src={user.avatarUrl} alt={user.fullName} />
+              {avatarUrl ? (
+                <AvatarImage src={avatarUrl} alt={user.fullName} />
               ) : (
                 <AvatarFallback className="bg-smartAudit-green text-white text-2xl">
                   {user.fullName.split(" ").map((name) => name[0]).join("")}
@@ -100,7 +135,11 @@ const Profile = () => {
               htmlFor="avatar-upload" 
               className="absolute bottom-2 right-0 rounded-full bg-white p-1 shadow-md cursor-pointer hover:bg-gray-100 border border-gray-200"
             >
-              <Upload className="h-4 w-4 text-gray-600" />
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 text-gray-600 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4 text-gray-600" />
+              )}
               <input 
                 id="avatar-upload" 
                 type="file" 

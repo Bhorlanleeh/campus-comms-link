@@ -29,24 +29,36 @@ const queryClient = new QueryClient({
   },
 });
 
-// Handle email verification callbacks
+// Handle email verification callbacks with improved robustness
 const EmailVerificationHandler = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
   useEffect(() => {
-    // If this component renders, it means we caught a verification URL
-    // We should redirect to login with a success message
+    // Extract query parameters
     const params = new URLSearchParams(location.search);
-    const type = params.get('type');
+    const type = params.get('type') || '';
+    const token = params.get('token') || '';
+    const errorDescription = params.get('error_description');
     
-    if (type === 'signup' || type === 'recovery' || type === 'invite') {
+    console.log("Verification handler received:", { type, token: token ? "exists" : "missing", errorDescription });
+    
+    // Check for error cases
+    if (errorDescription) {
+      console.error("Verification error:", errorDescription);
+      sessionStorage.setItem('verificationError', errorDescription);
+      navigate('/login');
+      return;
+    }
+
+    // Handle various verification paths, defaulting to login if unsure
+    if (type === 'signup' || type === 'recovery' || type === 'invite' || token) {
       // Set a flag to show success message on login page
       sessionStorage.setItem('emailVerified', 'true');
       navigate('/login');
     } else {
-      // For any other unexpected verification, redirect to dashboard or login
-      navigate('/dashboard');
+      // For any other verification path, redirect to login
+      navigate('/login');
     }
   }, [location.search, navigate]);
   
@@ -108,8 +120,10 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               
-              {/* Handle email verification */}
+              {/* Handle email verification - add multiple potential paths */}
               <Route path="/verify" element={<EmailVerificationHandler />} />
+              <Route path="/auth/verify" element={<EmailVerificationHandler />} />
+              <Route path="/auth/callback" element={<EmailVerificationHandler />} />
               
               {/* Protected routes */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />

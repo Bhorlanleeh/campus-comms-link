@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -166,85 +165,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      console.log("Fetching user profile for:", userId);
-      
-      // Get user profile from profiles table
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+// Improved function to fetch user profile
+const fetchUserProfile = async (userId: string) => {
+  try {
+    console.log("Fetching user profile for:", userId);
+    
+    // Get user profile from profiles table
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error) {
-        console.error("Error fetching profile:", error);
-        throw error;
-      }
-
-      // Get auth user data (for email and other metadata)
-      const { data } = await supabase.auth.getUser();
-      const userEmail = data?.user?.email || '';
-      const userMetadata = data?.user?.user_metadata || {};
-      
-      // For users who just signed up, the profile might not be fully updated yet
-      // Therefore we should prioritize metadata from the auth user if available
-      const fullName = userMetadata.full_name || (profile?.full_name || 'User');
-
-      // Fallback to mock data if no profile found
-      if (!profile) {
-        console.warn("No profile found, using fallback mock data");
-        
-        if (userEmail) {
-          const mockUser = mockUsers.find(u => u.email === userEmail);
-          if (mockUser) {
-            const updatedUser = {
-              ...mockUser,
-              id: userId,
-              fullName: userMetadata.full_name || mockUser.fullName
-            };
-            setUser(updatedUser);
-            localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
-            return;
-          }
-        }
-        
-        // If no email match, use the first mock user
-        const fallbackUser = { 
-          ...mockUsers[0], 
-          id: userId,
-          fullName: userMetadata.full_name || 'User',
-          email: userEmail
-        };
-        setUser(fallbackUser);
-        localStorage.setItem("smartAuditUser", JSON.stringify(fallbackUser));
-        return;
-      }
-
-      // Map profile data to User interface
-      const userData: User = {
-        id: profile.id,
-        fullName: fullName, // Use auth metadata preferentially for freshly created users
-        email: userEmail,
-        position: profile.position || 'Staff',
-        unit: profile.unit as UserUnit || 'AUDIT',
-        avatarUrl: profile.avatar_url
-      };
-
-      console.log("Setting user data:", userData);
-      setUser(userData);
-      localStorage.setItem("smartAuditUser", JSON.stringify(userData));
-    } catch (error) {
-      console.error("Error in fetchUserProfile:", error);
-      // Still try to use localStorage if available
-      const storedUser = getUserFromStorage();
-      if (storedUser) {
-        setUser(storedUser);
-      }
-    } finally {
-      setIsLoading(false);
+    if (error) {
+      console.error("Error fetching profile:", error);
+      throw error;
     }
-  };
+
+    // Get auth user data (for email and other metadata)
+    const { data } = await supabase.auth.getUser();
+    const authUser = data?.user;
+    const userEmail = authUser?.email || '';
+    const userMetadata = authUser?.user_metadata || {};
+    
+    // For users who just signed up, the profile might not be fully updated yet
+    // Therefore we should prioritize metadata from the auth user if available
+    const fullName = userMetadata.full_name || (profile?.full_name || 'User');
+
+    // Fallback to mock data if no profile found
+    if (!profile) {
+      console.warn("No profile found, using fallback mock data");
+      
+      if (userEmail) {
+        const mockUser = mockUsers.find(u => u.email === userEmail);
+        if (mockUser) {
+          const updatedUser = {
+            ...mockUser,
+            id: userId,
+            fullName: userMetadata.full_name || mockUser.fullName
+          };
+          setUser(updatedUser);
+          localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
+          return;
+        }
+      }
+      
+      // If no email match, use the first mock user
+      const fallbackUser = { 
+        ...mockUsers[0], 
+        id: userId,
+        fullName: userMetadata.full_name || 'User',
+        email: userEmail
+      };
+      setUser(fallbackUser);
+      localStorage.setItem("smartAuditUser", JSON.stringify(fallbackUser));
+      return;
+    }
+
+    // Map profile data to User interface with improved handling
+    const userData: User = {
+      id: profile.id,
+      fullName: fullName, // Use auth metadata preferentially for freshly created users
+      email: userEmail, // This comes from auth.user, not from the profile
+      position: profile.position || 'Staff',
+      unit: profile.unit as UserUnit || 'AUDIT',
+      avatarUrl: profile.avatar_url
+    };
+
+    console.log("Setting user data:", userData);
+    setUser(userData);
+    localStorage.setItem("smartAuditUser", JSON.stringify(userData));
+  } catch (error) {
+    console.error("Error in fetchUserProfile:", error);
+    // Still try to use localStorage if available
+    const storedUser = getUserFromStorage();
+    if (storedUser) {
+      setUser(storedUser);
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
@@ -400,67 +401,89 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const updateUserAvatar = async (file: File): Promise<void> => {
-    if (!user) {
-      throw new Error("No user logged in");
-    }
+const updateUserAvatar = async (file: File): Promise<void> => {
+  if (!user) {
+    throw new Error("No user logged in");
+  }
 
-    setIsLoading(true);
+  setIsLoading(true);
+  try {
+    // Upload to Supabase storage with improved error handling and logging
+    console.log("Starting avatar upload for user:", user.id);
+    
     try {
-      // Try to upload to Supabase storage
+      const filePath = `${user.id}`;
+      const bucket = 'avatars';
+      
+      // First ensure the bucket exists
       try {
-        const filePath = `avatars/${user.id}`;
-        const fileUrl = await uploadFile('avatars', filePath, file);
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const bucketExists = buckets?.some(b => b.name === bucket);
         
-        // Update profile in Supabase
-        const { error } = await supabase
-          .from('profiles')
-          .update({ avatar_url: fileUrl })
-          .eq('id', user.id);
+        if (!bucketExists) {
+          console.log(`Bucket '${bucket}' doesn't exist, creating it...`);
+          const { error } = await supabase.storage.createBucket(bucket, {
+            public: true
+          });
           
-        if (error) throw error;
-        
-        // Update local user state
-        const updatedUser = { ...user, avatarUrl: fileUrl };
-        setUser(updatedUser);
-        localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
-      } catch (error) {
-        console.error("Supabase storage upload failed, using fallback:", error);
-        
-        // Fallback to local storage
-        const reader = new FileReader();
-        
-        const fileReaderPromise = new Promise<string>((resolve, reject) => {
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = () => reject(new Error("Failed to read file"));
-          reader.readAsDataURL(file);
-        });
-        
-        const dataUrl = await fileReaderPromise;
-        const updatedUser = { ...user, avatarUrl: dataUrl };
-        
-        // Update mock user in array
-        const userIndex = mockUsers.findIndex(u => u.id === user.id);
-        if (userIndex !== -1) {
-          mockUsers[userIndex] = updatedUser;
+          if (error) throw error;
+          console.log(`Bucket '${bucket}' created successfully`);
         }
-        
-        // Update local state
-        setUser(updatedUser);
-        localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
+      } catch (error) {
+        console.error("Error checking/creating bucket:", error);
+        // Continue anyway, the upload might still work
       }
+      
+      console.log(`Uploading avatar to ${bucket}/${filePath}`);
+      const { data, error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, { upsert: true });
+      
+      if (uploadError) throw uploadError;
+      
+      // Get the public URL with proper bucket and path handling
+      const { data: publicURL } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(data?.path || filePath);
+      
+      const fileUrl = publicURL.publicUrl;
+      console.log("Avatar uploaded successfully, URL:", fileUrl);
+      
+      // Update profile in Supabase
+      console.log("Updating profile with new avatar URL");
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: fileUrl })
+        .eq('id', user.id);
+        
+      if (updateError) throw updateError;
+      
+      // Fetch fresh user data to ensure we have the latest avatar URL
+      console.log("Refreshing user profile data");
+      await fetchUserProfile(user.id);
+      
+      // Also update local user state as a backup
+      const updatedUser = { ...user, avatarUrl: fileUrl };
+      setUser(updatedUser);
+      localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
+      
+      console.log("Avatar update complete");
     } catch (error) {
-      console.error("Error updating avatar:", error);
-      toast({
-        title: "Update failed",
-        description: "Failed to update profile image",
-        variant: "destructive",
-      });
-      throw error;
-    } finally {
-      setIsLoading(false);
+      console.error("Supabase storage upload failed:", error);
+      throw error; // Rethrow to be caught by the outer try/catch
     }
-  };
+  } catch (error) {
+    console.error("Error updating avatar:", error);
+    toast({
+      title: "Update failed",
+      description: "Failed to update profile image. Please try again.",
+      variant: "destructive",
+    });
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const logout = async () => {
     setIsLoading(true);

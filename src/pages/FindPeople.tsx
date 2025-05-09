@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useUsers } from "@/context/UsersContext";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,36 +10,55 @@ import BottomNav from "@/components/BottomNav";
 import DesktopNav from "@/components/DesktopNav";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@/context/AuthContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "@/components/ui/use-toast";
 
 const FindPeople = () => {
   const { user } = useAuth();
-  const { getAllUsers } = useUsers();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
-  const [supabaseUsers, setSupabaseUsers] = useState<User[]>([]);
+  const [unitFilter, setUnitFilter] = useState<string>("");
+  const [realUsers, setRealUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Fetch real users from Supabase
+  // Fetch real users from Supabase with improved error handling
   useEffect(() => {
     const fetchRealUsers = async () => {
       setIsLoading(true);
       try {
-        // Fetch profiles from Supabase
+        console.log("Fetching users from Supabase...");
+        
+        // Fetch profiles from Supabase with better error handling
         const { data: profiles, error } = await supabase
           .from('profiles')
           .select('*');
         
         if (error) {
           console.error("Error fetching profiles:", error);
+          toast({
+            title: "Error fetching users",
+            description: "Could not load the user directory. Please try again later.",
+            variant: "destructive",
+          });
           return;
         }
         
         if (profiles && profiles.length > 0) {
-          // Map profiles to User format
+          console.log(`Successfully fetched ${profiles.length} profiles`);
+          
+          // Get current users to fetch emails
+          const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
+          const emailMap = authUsers ? 
+            authUsers.reduce((map, authUser) => {
+              map[authUser.id] = authUser.email;
+              return map;
+            }, {} as Record<string, string>) : {};
+          
+          // Map profiles to User format with fallback for email
           const formattedUsers: User[] = profiles.map(profile => ({
             id: profile.id,
             fullName: profile.full_name || 'Unknown User',
-            email: '', // Email is not stored in profiles for privacy
+            email: emailMap[profile.id] || '', // Use email from auth or empty string
             position: profile.position || 'Staff',
             unit: profile.unit as any || 'AUDIT',
             avatarUrl: profile.avatar_url
@@ -48,10 +66,18 @@ const FindPeople = () => {
           
           // Filter out current user
           const filteredUsers = formattedUsers.filter(u => u.id !== user?.id);
-          setSupabaseUsers(filteredUsers);
+          setRealUsers(filteredUsers);
+          console.log("Users set in state:", filteredUsers.length);
+        } else {
+          console.log("No profiles found in Supabase");
         }
       } catch (err) {
         console.error("Failed to fetch users:", err);
+        toast({
+          title: "Error loading users",
+          description: "Please check your connection and try again.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -60,27 +86,30 @@ const FindPeople = () => {
     fetchRealUsers();
   }, [user?.id]);
   
-  // Combine real users with mock users as fallback
-  const allUsers = supabaseUsers.length > 0 
-    ? supabaseUsers 
-    : getAllUsers().filter((u) => u.id !== user?.id);
-  
-  const filteredUsers = allUsers.filter((u) => 
-    u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.unit.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Apply filters to users
+  const filteredUsers = realUsers.filter((u) => {
+    const matchesSearch = 
+      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      u.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.unit.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesUnit = unitFilter ? u.unit === unitFilter : true;
+    
+    return matchesSearch && matchesUnit;
+  });
   
   const handleUserClick = (userId: string) => {
     navigate(`/chat/${userId}`);
   };
+  
+  const uniqueUnits = [...new Set(realUsers.map(user => user.unit))];
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <DesktopNav activeTab="find" />
       <Header title="Find People" showBackButton showHomeButton />
       
-      <div className="p-4 bg-white shadow-sm">
+      <div className="p-4 bg-white shadow-sm space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
           <Input 
@@ -90,6 +119,18 @@ const FindPeople = () => {
             className="pl-10"
           />
         </div>
+        
+        <Select value={unitFilter} onValueChange={setUnitFilter}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Filter by unit" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All Units</SelectItem>
+            {uniqueUnits.map(unit => (
+              <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       
       <main className="flex-1 overflow-y-auto px-4 py-2 pb-20">
@@ -127,7 +168,7 @@ const FindPeople = () => {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <p className="text-gray-500">No users found</p>
-            <p className="text-sm text-gray-400 mt-1">Try a different search term</p>
+            <p className="text-sm text-gray-400 mt-1">Try a different search term or filter</p>
           </div>
         )}
       </main>

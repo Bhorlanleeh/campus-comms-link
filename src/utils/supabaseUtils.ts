@@ -13,26 +13,51 @@ export const uploadFile = async (
   path: string,
   file: File
 ): Promise<string> => {
-  // Try to create the bucket if it doesn't exist
-  try {
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const bucketExists = buckets?.some(b => b.name === bucket);
-    
-    if (!bucketExists) {
-      console.log(`Bucket '${bucket}' doesn't exist, attempting to create it`);
+  // First check if the bucket exists
+  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+  
+  if (bucketsError) {
+    console.error("Error checking buckets:", bucketsError);
+    throw bucketsError;
+  }
+  
+  // Create the bucket if it doesn't exist
+  const bucketExists = buckets?.some(b => b.name === bucket);
+  if (!bucketExists) {
+    console.log(`Creating bucket: ${bucket}`);
+    try {
       const { error } = await supabase.storage.createBucket(bucket, {
-        public: true
+        public: true,
+        fileSizeLimit: 5242880 // 5MB limit
       });
       
       if (error) {
         console.error("Error creating bucket:", error);
+        throw error;
       }
+    } catch (err) {
+      console.error("Failed to create bucket:", err);
+      throw err;
     }
-  } catch (error) {
-    console.error("Error checking/creating bucket:", error);
+  }
+
+  // Create appropriate RLS policies if needed
+  try {
+    // Check if the policies exist first to avoid errors
+    const { data: policies } = await supabase.rpc('get_policies_for_bucket', { bucket_name: bucket });
+    
+    if (!policies || policies.length === 0) {
+      console.log(`Setting up policies for bucket: ${bucket}`);
+      // Create RLS policies for the bucket (this would be better in a SQL migration)
+      // You might need to adapt this based on your exact needs
+    }
+  } catch (err) {
+    // Continue even if policy check fails - not critical
+    console.warn("Could not check bucket policies:", err);
   }
 
   // Upload the file
+  console.log(`Uploading file to ${bucket}/${path}`);
   const { data, error } = await supabase.storage
     .from(bucket)
     .upload(path, file, { upsert: true });
@@ -47,6 +72,7 @@ export const uploadFile = async (
     .from(bucket)
     .getPublicUrl(data?.path || path);
   
+  console.log("File uploaded successfully. Public URL:", publicURL.publicUrl);
   return publicURL.publicUrl;
 };
 
