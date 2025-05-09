@@ -182,11 +182,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         throw error;
       }
 
+      // Get auth user email since it's not stored in the profiles table
+      const { data } = await supabase.auth.getUser();
+      const userEmail = data?.user?.email || '';
+
       // Fallback to mock data if no profile found
       if (!profile) {
         console.warn("No profile found, using fallback mock data");
         // Try to get auth email to match with mock data
-        const { data } = await supabase.auth.getUser();
         const email = data?.user?.email;
         
         if (email) {
@@ -209,7 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const userData: User = {
         id: profile.id,
         fullName: profile.full_name || 'User',
-        email: profile.email || '',
+        email: userEmail, // Use email from auth user data instead of profile
         position: profile.position || 'Staff',
         unit: profile.unit as UserUnit || 'AUDIT',
         avatarUrl: profile.avatar_url
