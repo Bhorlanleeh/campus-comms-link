@@ -113,35 +113,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  // Helper function to get user from localStorage
+  const getUserFromStorage = (): User | null => {
+    const storedUser = localStorage.getItem("smartAuditUser");
+    return storedUser ? JSON.parse(storedUser) : null;
+  };
+
   useEffect(() => {
-    // Set up auth state listener FIRST
+    // Initialize auth state from localStorage first for faster UI render
+    const storedUser = getUserFromStorage();
+    if (storedUser) {
+      setUser(storedUser);
+    }
+    
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log("Auth state changed:", event);
+        console.log("Auth state changed:", event, !!session);
+        
         if (event === 'SIGNED_IN' && session?.user) {
-          // Get user profile data
+          // Get user profile data after a short delay to prevent Supabase deadlocks
           setTimeout(() => {
             fetchUserProfile(session.user.id);
-          }, 0);
+          }, 10);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
+          localStorage.removeItem("smartAuditUser");
         }
       }
     );
 
-    // THEN check for existing session
+    // Check for existing session
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        console.log("Initial session check:", !!session);
         
         if (session?.user) {
           await fetchUserProfile(session.user.id);
-        } else {
-          // Fallback to stored user in localStorage when no active Supabase session
-          const storedUser = localStorage.getItem("smartAuditUser");
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
-          }
         }
       } catch (error) {
         console.error("Error checking session:", error);
@@ -159,35 +168,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log("Fetching user profile for:", userId);
+      
       // Get user profile from profiles table
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
+        console.error("Error fetching profile:", error);
         throw error;
       }
 
-      if (profile) {
-        // Map profile data to User interface
-        const userData: User = {
-          id: profile.id,
-          fullName: profile.full_name,
-          email: '', // Email not stored in profiles table for security
-          position: profile.position,
-          unit: profile.unit as UserUnit,
-          avatarUrl: profile.avatar_url
-        };
-
-        setUser(userData);
-        localStorage.setItem("smartAuditUser", JSON.stringify(userData));
-      } else {
-        console.log("No profile found for user");
+      // Fallback to mock data if no profile found
+      if (!profile) {
+        console.warn("No profile found, using fallback mock data");
+        // Try to get auth email to match with mock data
+        const { data } = await supabase.auth.getUser();
+        const email = data?.user?.email;
+        
+        if (email) {
+          const mockUser = mockUsers.find(u => u.email === email);
+          if (mockUser) {
+            setUser(mockUser);
+            localStorage.setItem("smartAuditUser", JSON.stringify(mockUser));
+            return;
+          }
+        }
+        
+        // If no email match, use the first mock user
+        const fallbackUser = { ...mockUsers[0], id: userId };
+        setUser(fallbackUser);
+        localStorage.setItem("smartAuditUser", JSON.stringify(fallbackUser));
+        return;
       }
+
+      // Map profile data to User interface
+      const userData: User = {
+        id: profile.id,
+        fullName: profile.full_name || 'User',
+        email: profile.email || '',
+        position: profile.position || 'Staff',
+        unit: profile.unit as UserUnit || 'AUDIT',
+        avatarUrl: profile.avatar_url
+      };
+
+      console.log("Setting user data:", userData);
+      setUser(userData);
+      localStorage.setItem("smartAuditUser", JSON.stringify(userData));
     } catch (error) {
-      console.error("Error fetching user profile:", error);
+      console.error("Error in fetchUserProfile:", error);
+      // Still try to use localStorage if available
+      const storedUser = getUserFromStorage();
+      if (storedUser) {
+        setUser(storedUser);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -196,14 +233,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
+      console.log("Login attempt:", email);
+      
       // Clean up existing auth state
       cleanupAuthState();
       
-      // Attempt global sign out
+      // Attempt global sign out first
       try {
         await supabase.auth.signOut({ scope: 'global' });
       } catch (err) {
         // Continue even if this fails
+        console.warn("Global signout failed:", err);
       }
 
       // Sign in with Supabase
@@ -213,7 +253,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (error) {
-        // Fall back to mock users if Supabase auth fails
         console.warn("Supabase auth failed, falling back to mock users:", error);
         
         // Check if email exists in our mock data

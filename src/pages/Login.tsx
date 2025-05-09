@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,19 +14,30 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    
     try {
       await login(email, password);
+      
+      // Set a flag indicating successful login
+      sessionStorage.setItem('loginSuccess', 'true');
+      
       // Force a complete page reload and navigate directly to dashboard
-      window.location.replace('/dashboard');
+      window.location.href = '/dashboard';
     } catch (error) {
       console.error("Login failed", error);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -40,7 +51,7 @@ const Login = () => {
       {/* Left side - Green background with logo */}
       <div className="hidden md:flex md:w-1/2 bg-smartAudit-green text-white items-center justify-center flex-col p-8">
         <Logo size="lg" white />
-        <div className="text-center mt-8">
+        <div className="text-center mt-4">
           <h2 className="text-4xl font-bold">Welcome to</h2>
           <h1 className="text-6xl font-bold mt-4">FUNAAB</h1>
           <h3 className="text-3xl font-medium mt-2">SmartAudit</h3>

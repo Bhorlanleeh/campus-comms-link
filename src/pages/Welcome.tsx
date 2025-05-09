@@ -12,7 +12,7 @@ const Welcome = () => {
   // If already logged in, redirect to dashboard
   useEffect(() => {
     if (!isLoading && user) {
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     }
   }, [isLoading, user, navigate]);
   
@@ -33,17 +33,17 @@ const Welcome = () => {
       <div className="flex-1 flex flex-col items-center justify-center p-4 text-white">
         <Logo size="lg" white />
         
-        <div className="text-center mt-4">
+        <div className="text-center mt-2">
           <h2 className="text-4xl font-bold">Welcome to</h2>
           <h1 className="text-6xl font-bold mt-2">FUNAAB</h1>
-          <h3 className="text-3xl font-medium mt-2">SmartAudit</h3>
-          <p className="mt-6 max-w-md px-4">
+          <h3 className="text-3xl font-medium mt-1">SmartAudit</h3>
+          <p className="mt-4 max-w-md px-4">
             A communication system for BURSARY, AUDIT, and REGISTRY units.
             Share documents and information seamlessly.
           </p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-4 mt-12 w-full max-w-xs">
+        <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full max-w-xs">
           <Button
             variant="default"
             className="flex-1 bg-white text-smartAudit-green hover:bg-white/90"
@@ -60,7 +60,7 @@ const Welcome = () => {
           </Button>
         </div>
         
-        <p className="mt-12 text-sm opacity-80 text-center px-4">
+        <p className="mt-8 text-sm opacity-80 text-center px-4">
           Powered by The Federal University of Agriculture, Abeokuta.
         </p>
       </div>

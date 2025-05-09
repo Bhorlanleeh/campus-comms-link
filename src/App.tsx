@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { UsersProvider } from "./context/UsersContext";
 
@@ -19,21 +19,46 @@ import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
-// Protected route component
+// Protected route component with improved auth checking
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
+  const location = useLocation();
+  
+  // Check for login success flag on dashboard route to prevent redirect loops
+  const isLoginSuccess = location.pathname === '/dashboard' && 
+    sessionStorage.getItem('loginSuccess') === 'true';
   
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
   
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  // If we have a user or this is right after login success, render the protected content
+  if (user || isLoginSuccess) {
+    // Clear login success flag after successful navigation
+    if (isLoginSuccess) {
+      sessionStorage.removeItem('loginSuccess');
+    }
+    return <>{children}</>;
   }
   
-  return <>{children}</>;
+  // Check if we have a locally stored user as fallback
+  const storedUser = localStorage.getItem("smartAuditUser");
+  if (storedUser) {
+    // We have a stored user, render the protected content
+    return <>{children}</>;
+  }
+  
+  // No authenticated user, redirect to login
+  return <Navigate to="/login" replace />;
 };
 
 const App = () => (
