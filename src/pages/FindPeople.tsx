@@ -9,7 +9,7 @@ import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import DesktopNav from "@/components/DesktopNav";
 import { supabase } from "@/integrations/supabase/client";
-import { User } from "@/context/AuthContext";
+import { User, UserUnit } from "@/context/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
 
@@ -65,7 +65,7 @@ const FindPeople = () => {
             fullName: profile.full_name || 'Unknown User',
             email: emailMap[profile.id] || '', // Use email from auth or empty string
             position: profile.position || 'Staff',
-            unit: profile.unit || 'AUDIT',
+            unit: (profile.unit || 'AUDIT') as UserUnit,
             avatarUrl: profile.avatar_url
           }));
           
@@ -107,7 +107,8 @@ const FindPeople = () => {
     navigate(`/chat/${userId}`);
   };
   
-  const uniqueUnits = [...new Set(realUsers.map(user => user.unit))];
+  // Get unique units and ensure none are empty strings
+  const uniqueUnits = [...new Set(realUsers.map(user => user.unit))].filter(Boolean);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -130,7 +131,7 @@ const FindPeople = () => {
             <SelectValue placeholder="Filter by unit" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Units</SelectItem>
+            <SelectItem value="all">All Units</SelectItem>
             {uniqueUnits.map(unit => (
               <SelectItem key={unit} value={unit}>{unit}</SelectItem>
             ))}
