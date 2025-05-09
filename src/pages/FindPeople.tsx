@@ -46,13 +46,18 @@ const FindPeople = () => {
         if (profiles && profiles.length > 0) {
           console.log(`Successfully fetched ${profiles.length} profiles`);
           
-          // Get current users to fetch emails
+          // Get auth users to fetch emails
           const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
-          const emailMap = authUsers ? 
-            authUsers.reduce((map, authUser) => {
-              map[authUser.id] = authUser.email;
-              return map;
-            }, {} as Record<string, string>) : {};
+          
+          // Create a map of user IDs to emails for easier lookup
+          const emailMap: Record<string, string> = {};
+          if (authUsers && Array.isArray(authUsers)) {
+            authUsers.forEach((authUser: any) => {
+              if (authUser && authUser.id && authUser.email) {
+                emailMap[authUser.id] = authUser.email;
+              }
+            });
+          }
           
           // Map profiles to User format with fallback for email
           const formattedUsers: User[] = profiles.map(profile => ({
@@ -60,7 +65,7 @@ const FindPeople = () => {
             fullName: profile.full_name || 'Unknown User',
             email: emailMap[profile.id] || '', // Use email from auth or empty string
             position: profile.position || 'Staff',
-            unit: profile.unit as any || 'AUDIT',
+            unit: profile.unit || 'AUDIT',
             avatarUrl: profile.avatar_url
           }));
           
