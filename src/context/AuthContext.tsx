@@ -182,27 +182,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         throw error;
       }
 
-      // Get auth user email since it's not stored in the profiles table
+      // Get auth user data (for email and other metadata)
       const { data } = await supabase.auth.getUser();
       const userEmail = data?.user?.email || '';
+      const userMetadata = data?.user?.user_metadata || {};
+      
+      // For users who just signed up, the profile might not be fully updated yet
+      // Therefore we should prioritize metadata from the auth user if available
+      const fullName = userMetadata.full_name || (profile?.full_name || 'User');
 
       // Fallback to mock data if no profile found
       if (!profile) {
         console.warn("No profile found, using fallback mock data");
-        // Try to get auth email to match with mock data
-        const email = data?.user?.email;
         
-        if (email) {
-          const mockUser = mockUsers.find(u => u.email === email);
+        if (userEmail) {
+          const mockUser = mockUsers.find(u => u.email === userEmail);
           if (mockUser) {
-            setUser(mockUser);
-            localStorage.setItem("smartAuditUser", JSON.stringify(mockUser));
+            const updatedUser = {
+              ...mockUser,
+              id: userId,
+              fullName: userMetadata.full_name || mockUser.fullName
+            };
+            setUser(updatedUser);
+            localStorage.setItem("smartAuditUser", JSON.stringify(updatedUser));
             return;
           }
         }
         
         // If no email match, use the first mock user
-        const fallbackUser = { ...mockUsers[0], id: userId };
+        const fallbackUser = { 
+          ...mockUsers[0], 
+          id: userId,
+          fullName: userMetadata.full_name || 'User',
+          email: userEmail
+        };
         setUser(fallbackUser);
         localStorage.setItem("smartAuditUser", JSON.stringify(fallbackUser));
         return;
@@ -211,8 +224,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Map profile data to User interface
       const userData: User = {
         id: profile.id,
-        fullName: profile.full_name || 'User',
-        email: userEmail, // Use email from auth user data instead of profile
+        fullName: fullName, // Use auth metadata preferentially for freshly created users
+        email: userEmail,
         position: profile.position || 'Staff',
         unit: profile.unit as UserUnit || 'AUDIT',
         avatarUrl: profile.avatar_url
@@ -275,7 +288,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         localStorage.setItem("smartAuditUser", JSON.stringify(foundUser));
       } else {
         console.log("Supabase login successful:", data);
-        // User profile will be fetched via onAuthStateChange
+        // Set the login success flag to prevent redirect loops
+        sessionStorage.setItem('loginSuccess', 'true');
+        
+        // Force a full page reload to the dashboard
+        window.location.href = '/dashboard';
+        return; // Stop execution since we're reloading the page
       }
 
       toast({
@@ -358,7 +376,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           // Try to continue anyway
         }
         
-        // User data will be set via onAuthStateChange
+        // Set the login success flag to prevent redirect loops
+        sessionStorage.setItem('loginSuccess', 'true');
+        
+        // Force a full page reload to the dashboard
+        window.location.href = '/dashboard';
+        return; // Stop execution since we're reloading the page
       }
 
       toast({

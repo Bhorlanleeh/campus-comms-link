@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useUsers } from "@/context/UsersContext";
 import { useNavigate } from "react-router-dom";
@@ -9,14 +9,61 @@ import { Search } from "lucide-react";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import DesktopNav from "@/components/DesktopNav";
+import { supabase } from "@/integrations/supabase/client";
+import { User } from "@/context/AuthContext";
 
 const FindPeople = () => {
   const { user } = useAuth();
   const { getAllUsers } = useUsers();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [supabaseUsers, setSupabaseUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
-  const allUsers = getAllUsers().filter((u) => u.id !== user?.id);
+  // Fetch real users from Supabase
+  useEffect(() => {
+    const fetchRealUsers = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch profiles from Supabase
+        const { data: profiles, error } = await supabase
+          .from('profiles')
+          .select('*');
+        
+        if (error) {
+          console.error("Error fetching profiles:", error);
+          return;
+        }
+        
+        if (profiles && profiles.length > 0) {
+          // Map profiles to User format
+          const formattedUsers: User[] = profiles.map(profile => ({
+            id: profile.id,
+            fullName: profile.full_name || 'Unknown User',
+            email: '', // Email is not stored in profiles for privacy
+            position: profile.position || 'Staff',
+            unit: profile.unit as any || 'AUDIT',
+            avatarUrl: profile.avatar_url
+          }));
+          
+          // Filter out current user
+          const filteredUsers = formattedUsers.filter(u => u.id !== user?.id);
+          setSupabaseUsers(filteredUsers);
+        }
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchRealUsers();
+  }, [user?.id]);
+  
+  // Combine real users with mock users as fallback
+  const allUsers = supabaseUsers.length > 0 
+    ? supabaseUsers 
+    : getAllUsers().filter((u) => u.id !== user?.id);
   
   const filteredUsers = allUsers.filter((u) => 
     u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -46,7 +93,11 @@ const FindPeople = () => {
       </div>
       
       <main className="flex-1 overflow-y-auto px-4 py-2 pb-20">
-        {filteredUsers.length > 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-smartAudit-green"></div>
+          </div>
+        ) : filteredUsers.length > 0 ? (
           <div className="space-y-2 divide-y divide-gray-100">
             {filteredUsers.map((otherUser) => (
               <div
