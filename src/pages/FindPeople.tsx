@@ -20,6 +20,7 @@ const FindPeople = () => {
   const [unitFilter, setUnitFilter] = useState<string>("");
   const [realUsers, setRealUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [uniqueUnits, setUniqueUnits] = useState<string[]>([]);
   
   // Fetch real users from Supabase with improved error handling
   useEffect(() => {
@@ -46,24 +47,11 @@ const FindPeople = () => {
         if (profiles && profiles.length > 0) {
           console.log(`Successfully fetched ${profiles.length} profiles`);
           
-          // Get auth users to fetch emails
-          const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
-          
-          // Create a map of user IDs to emails for easier lookup
-          const emailMap: Record<string, string> = {};
-          if (authUsers && Array.isArray(authUsers)) {
-            authUsers.forEach((authUser: any) => {
-              if (authUser && authUser.id && authUser.email) {
-                emailMap[authUser.id] = authUser.email;
-              }
-            });
-          }
-          
-          // Map profiles to User format with fallback for email
+          // Map profiles to User format
           const formattedUsers: User[] = profiles.map(profile => ({
             id: profile.id,
             fullName: profile.full_name || 'Unknown User',
-            email: emailMap[profile.id] || '', // Use email from auth or empty string
+            email: '', // We don't display emails for privacy
             position: profile.position || 'Staff',
             unit: (profile.unit || 'AUDIT') as UserUnit,
             avatarUrl: profile.avatar_url
@@ -72,6 +60,11 @@ const FindPeople = () => {
           // Filter out current user
           const filteredUsers = formattedUsers.filter(u => u.id !== user?.id);
           setRealUsers(filteredUsers);
+          
+          // Extract all unique units for the filter
+          const units = [...new Set(formattedUsers.map(u => u.unit))].filter(Boolean);
+          setUniqueUnits(units);
+          
           console.log("Users set in state:", filteredUsers.length);
         } else {
           console.log("No profiles found in Supabase");
@@ -98,7 +91,7 @@ const FindPeople = () => {
       u.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.unit.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesUnit = unitFilter ? u.unit === unitFilter : true;
+    const matchesUnit = unitFilter && unitFilter !== "all" ? u.unit === unitFilter : true;
     
     return matchesSearch && matchesUnit;
   });
@@ -106,9 +99,6 @@ const FindPeople = () => {
   const handleUserClick = (userId: string) => {
     navigate(`/chat/${userId}`);
   };
-  
-  // Get unique units and ensure none are empty strings
-  const uniqueUnits = [...new Set(realUsers.map(user => user.unit))].filter(Boolean);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">

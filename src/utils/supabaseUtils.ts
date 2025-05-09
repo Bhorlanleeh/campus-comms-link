@@ -47,7 +47,7 @@ export const uploadFile = async (
     const { data: policies } = await supabase.rpc('get_policies_for_bucket', { bucket_name: bucket });
     
     // Handle policies safely with proper type checking
-    if (!policies || (Array.isArray(policies) && policies.length === 0)) {
+    if (!policies || (Array.isArray(policies) && !policies.length)) {
       console.log(`Setting up policies for bucket: ${bucket}`);
       // Create RLS policies for the bucket (this would be better in a SQL migration)
       // You might need to adapt this based on your exact needs

@@ -1,233 +1,263 @@
 
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { UserUnit, useAuth } from "@/context/AuthContext";
-import { Loader, Eye, EyeOff } from "lucide-react";
-import Logo from "@/components/Logo";
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from "@/hooks/use-toast";
+import Logo from '@/components/Logo';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2 } from 'lucide-react';
 
 const Signup = () => {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [position, setPosition] = useState("");
-  const [unit, setUnit] = useState<UserUnit | "">("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  const { signup } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    fullName: '',
+    position: '',
+    unit: '',
+  });
+  const [errors, setErrors] = useState<{
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+    fullName?: string;
+    position?: string;
+    unit?: string;
+  }>({});
 
-  const validatePasswords = () => {
-    if (password !== confirmPassword) {
-      setPasswordError("Passwords do not match");
-      return false;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user starts typing
+    if (errors[name as keyof typeof errors]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
     }
-    if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters long");
-      return false;
+  };
+
+  const handleUnitChange = (value: string) => {
+    setFormData(prev => ({ ...prev, unit: value }));
+    if (errors.unit) {
+      setErrors(prev => ({ ...prev, unit: undefined }));
     }
-    setPasswordError("");
-    return true;
+  };
+
+  const validateForm = () => {
+    const newErrors: typeof errors = {};
+    
+    if (!formData.email) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Email is invalid';
+    }
+    
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    
+    if (!formData.fullName) {
+      newErrors.fullName = 'Full name is required';
+    }
+    
+    if (!formData.position) {
+      newErrors.position = 'Position is required';
+    }
+    
+    if (!formData.unit) {
+      newErrors.unit = 'Unit is required';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validatePasswords()) return;
-    if (!unit) return;
+    if (!validateForm()) {
+      return;
+    }
     
     setIsSubmitting(true);
+    
     try {
-      await signup({
-        fullName,
-        email,
-        password,
-        position,
-        unit: unit as UserUnit,
+      // Create user in Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.fullName,
+            position: formData.position,
+            unit: formData.unit,
+          },
+        },
       });
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("Signup failed", error);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Create user profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: data.user?.id,
+          full_name: formData.fullName,
+          position: formData.position,
+          unit: formData.unit,
+        });
+      
+      if (profileError) {
+        throw profileError;
+      }
+      
+      toast({
+        title: "Account created!",
+        description: "Please check your email to confirm your account.",
+      });
+      
+      navigate('/login');
+    } catch (error: any) {
+      toast({
+        title: "Registration failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen w-full">
-      {/* Left side - Green background with logo */}
-      <div className="hidden md:flex md:w-1/2 bg-smartAudit-green text-white items-center justify-center flex-col p-8">
-        <Logo size="lg" white />
-        <div className="text-center mt-8">
-          <h2 className="text-4xl font-bold">Welcome to</h2>
-          <h1 className="text-6xl font-bold mt-4">FUNAAB</h1>
-          <h3 className="text-3xl font-medium mt-2">SmartAudit</h3>
-          <p className="mt-8 text-sm opacity-80">
-            Powered by The Federal University of Agriculture, Abeokuta.
-          </p>
-        </div>
-      </div>
-
-      {/* Right side - Signup form */}
-      <div className="w-full md:w-1/2 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          {/* Logo for mobile view */}
-          <div className="md:hidden flex justify-center mb-6">
-            <Logo size="md" />
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-50">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1 flex items-center flex-col">
+          <Logo size="md" />
+          <CardTitle className="text-2xl mt-4">Create an account</CardTitle>
+          <CardDescription>
+            Sign up to access your workspace
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
+                id="fullName"
+                name="fullName"
+                placeholder="Enter your full name"
+                value={formData.fullName}
+                onChange={handleInputChange}
+              />
+              {errors.fullName && <p className="text-red-500 text-xs">{errors.fullName}</p>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="name@example.com"
+                value={formData.email}
+                onChange={handleInputChange}
+              />
+              {errors.email && <p className="text-red-500 text-xs">{errors.email}</p>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Create a password"
+                value={formData.password}
+                onChange={handleInputChange}
+              />
+              {errors.password && <p className="text-red-500 text-xs">{errors.password}</p>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                value={formData.confirmPassword}
+                onChange={handleInputChange}
+              />
+              {errors.confirmPassword && <p className="text-red-500 text-xs">{errors.confirmPassword}</p>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="position">Position</Label>
+              <Input
+                id="position"
+                name="position"
+                placeholder="e.g. Accountant, Manager"
+                value={formData.position}
+                onChange={handleInputChange}
+              />
+              {errors.position && <p className="text-red-500 text-xs">{errors.position}</p>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="unit">Unit</Label>
+              <Select value={formData.unit} onValueChange={handleUnitChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AUDIT">Audit</SelectItem>
+                  <SelectItem value="BURSARY">Bursary</SelectItem>
+                  <SelectItem value="REGISTRY">Registry</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.unit && <p className="text-red-500 text-xs">{errors.unit}</p>}
+            </div>
+            
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                "Create Account"
+              )}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-2">
+          <div className="text-sm text-center text-gray-500">
+            By creating an account, you agree to our Terms of Service and Privacy Policy
           </div>
-
-          <Card className="border-none shadow-lg mb-8">
-            <CardHeader className="space-y-1">
-              <h2 className="text-2xl font-bold text-center">Create Account</h2>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    placeholder="John Doe"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    placeholder="example@email.com"
-                    type="email"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    autoCorrect="off"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
-                  <Input
-                    id="position"
-                    placeholder="Accountant, Auditor, etc."
-                    value={position}
-                    onChange={(e) => setPosition(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="unit">Unit</Label>
-                  <Select
-                    value={unit}
-                    onValueChange={(value) => setUnit(value as UserUnit)}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select your unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AUDIT">AUDIT</SelectItem>
-                      <SelectItem value="REGISTRY">REGISTRY</SelectItem>
-                      <SelectItem value="BURSARY">BURSARY</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirmPassword"
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  {passwordError && (
-                    <p className="text-destructive text-sm">{passwordError}</p>
-                  )}
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-smartAudit-green hover:bg-smartAudit-green/90"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <Loader className="h-4 w-4 animate-spin mr-2" />
-                  ) : null}
-                  Create Account
-                </Button>
-              </form>
-            </CardContent>
-            <CardFooter className="flex justify-center">
-              <p className="text-sm text-muted-foreground">
-                Already have an account?{" "}
-                <Link
-                  to="/login"
-                  className="text-smartAudit-green font-medium hover:underline"
-                >
-                  Login
-                </Link>
-              </p>
-            </CardFooter>
-          </Card>
-        </div>
-      </div>
+          <div className="text-sm text-center">
+            Already have an account?{' '}
+            <Link to="/login" className="text-smartAudit-green hover:underline">
+              Sign in
+            </Link>
+          </div>
+        </CardFooter>
+      </Card>
     </div>
   );
 };

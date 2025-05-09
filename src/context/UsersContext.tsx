@@ -1,6 +1,10 @@
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, UserUnit, useAuth } from "./AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { uploadFile } from "@/utils/supabaseUtils";
+import { toast } from "@/components/ui/use-toast";
+import { v4 as uuidv4 } from "uuid";
 
 interface Message {
   id: string;
@@ -11,92 +15,18 @@ interface Message {
   type: "text" | "voice" | "document" | "image";
   fileUrl?: string;
   sender?: User;
+  is_read?: boolean;
 }
 
 interface UsersContextType {
-  getUsersByUnit: (unit: UserUnit) => User[];
-  getAllUsers: () => User[];
-  getUserById: (id: string) => User | undefined;
-  getMessages: (userId: string) => Message[];
-  sendMessage: (receiverId: string, content: string, type: Message['type'], fileUrl?: string) => void;
-  getAllMessages: () => Message[];
+  getUsersByUnit: (unit: UserUnit) => Promise<User[]>;
+  getAllUsers: () => Promise<User[]>;
+  getUserById: (id: string) => Promise<User | undefined>;
+  getMessages: (userId: string) => Promise<Message[]>;
+  sendMessage: (receiverId: string, content: string, type: Message['type'], fileUrl?: string) => Promise<void>;
+  getAllMessages: () => Promise<Message[]>;
+  loading: boolean;
 }
-
-// Mock messages for demo purposes
-const mockMessages: Record<string, Message[]> = {
-  "1_2": [
-    {
-      id: "m1",
-      senderId: "1",
-      receiverId: "2",
-      content: "Hello Jane, can you send me the audit report?",
-      timestamp: new Date(2025, 4, 1, 10, 30),
-      type: "text",
-    },
-    {
-      id: "m2",
-      senderId: "2",
-      receiverId: "1",
-      content: "Sure, I'll send it right away.",
-      timestamp: new Date(2025, 4, 1, 10, 32),
-      type: "text",
-    },
-    {
-      id: "m3",
-      senderId: "2",
-      receiverId: "1",
-      content: "Annual Audit Report.pdf",
-      timestamp: new Date(2025, 4, 1, 10, 35),
-      type: "document",
-      fileUrl: "#",
-    },
-  ],
-  "1_3": [
-    {
-      id: "m4",
-      senderId: "1",
-      receiverId: "3",
-      content: "Hi Bob, when will the financial report be ready?",
-      timestamp: new Date(2025, 4, 2, 9, 15),
-      type: "text",
-    },
-    {
-      id: "m5",
-      senderId: "3",
-      receiverId: "1",
-      content: "I'm working on it. Should be done by EOD.",
-      timestamp: new Date(2025, 4, 2, 9, 20),
-      type: "text",
-    },
-  ],
-  "2_3": [
-    {
-      id: "m6",
-      senderId: "2",
-      receiverId: "3",
-      content: "Bob, do you have the budget forecast?",
-      timestamp: new Date(2025, 4, 3, 14, 5),
-      type: "text",
-    },
-    {
-      id: "m7",
-      senderId: "3",
-      receiverId: "2",
-      content: "Yes, here's the latest version.",
-      timestamp: new Date(2025, 4, 3, 14, 10),
-      type: "text",
-    },
-    {
-      id: "m8",
-      senderId: "3",
-      receiverId: "2",
-      content: "Budget Forecast Q2 2025.xlsx",
-      timestamp: new Date(2025, 4, 3, 14, 12),
-      type: "document",
-      fileUrl: "#",
-    },
-  ],
-};
 
 const UsersContext = createContext<UsersContextType | undefined>(undefined);
 
@@ -104,114 +34,264 @@ export const UsersProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { user } = useAuth();
-  
-  // These would come from an API in a real application
-  const mockUsers: User[] = [
-    {
-      id: "1",
-      fullName: "John Doe",
-      email: "john@example.com",
-      position: "Accountant",
-      unit: "AUDIT",
-    },
-    {
-      id: "2",
-      fullName: "Jane Smith",
-      email: "jane@example.com",
-      position: "Manager",
-      unit: "REGISTRY",
-    },
-    {
-      id: "3",
-      fullName: "Bob Johnson",
-      email: "bob@example.com",
-      position: "Financial Analyst",
-      unit: "BURSARY",
-    },
-    {
-      id: "4",
-      fullName: "Alice Brown",
-      email: "alice@example.com",
-      position: "Senior Auditor",
-      unit: "AUDIT",
-    },
-    {
-      id: "5",
-      fullName: "Charlie Davis",
-      email: "charlie@example.com",
-      position: "Records Officer",
-      unit: "REGISTRY",
-    },
-    {
-      id: "6",
-      fullName: "Eva Wilson",
-      email: "eva@example.com",
-      position: "Financial Controller",
-      unit: "BURSARY",
-    },
-  ];
+  const [loading, setLoading] = useState(false);
 
-  const getUsersByUnit = (unit: UserUnit) => {
-    return mockUsers.filter((u) => u.unit === unit);
-  };
+  // Fetch users by unit from Supabase
+  const getUsersByUnit = async (unit: UserUnit): Promise<User[]> => {
+    try {
+      setLoading(true);
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('unit', unit);
 
-  const getAllUsers = () => {
-    return mockUsers;
-  };
+      if (error) {
+        console.error("Error fetching users by unit:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load users. Please try again later.",
+          variant: "destructive",
+        });
+        return [];
+      }
 
-  const getUserById = (id: string) => {
-    return mockUsers.find((u) => u.id === id);
-  };
-
-  const getMessages = (userId: string) => {
-    if (!user) return [];
-    
-    const key1 = `${user.id}_${userId}`;
-    const key2 = `${userId}_${user.id}`;
-    
-    const messages = [...(mockMessages[key1] || []), ...(mockMessages[key2] || [])];
-    
-    return messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-  };
-
-  // Add this new function to get all messages
-  const getAllMessages = () => {
-    if (!user) return [];
-    
-    // Flatten all messages into a single array
-    const allMessages = Object.values(mockMessages).flat();
-    
-    // Add sender information to each message
-    const messagesWithSenders = allMessages.map(message => {
-      const sender = getUserById(message.senderId);
-      return { ...message, sender };
-    });
-    
-    // Filter messages for current user (sent to or received by)
-    return messagesWithSenders.filter(
-      message => message.senderId === user.id || message.receiverId === user.id
-    );
-  };
-
-  const sendMessage = (receiverId: string, content: string, type: Message['type'], fileUrl?: string) => {
-    if (!user) return;
-    
-    const key = `${user.id}_${receiverId}`;
-    if (!mockMessages[key]) {
-      mockMessages[key] = [];
+      // Map profiles to User format
+      return profiles.map(profile => ({
+        id: profile.id,
+        fullName: profile.full_name || 'Unknown User',
+        position: profile.position || '',
+        unit: profile.unit as UserUnit,
+        avatarUrl: profile.avatar_url,
+        email: '' // We don't expose email in profile table
+      }));
+    } catch (err) {
+      console.error("Failed to fetch users by unit:", err);
+      return [];
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Get all users from Supabase
+  const getAllUsers = async (): Promise<User[]> => {
+    try {
+      setLoading(true);
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('*');
+
+      if (error) {
+        console.error("Error fetching all users:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load users. Please try again later.",
+          variant: "destructive",
+        });
+        return [];
+      }
+
+      // Map profiles to User format
+      return profiles.map(profile => ({
+        id: profile.id,
+        fullName: profile.full_name || 'Unknown User',
+        position: profile.position || '',
+        unit: profile.unit as UserUnit,
+        avatarUrl: profile.avatar_url,
+        email: '' // We don't expose email in profile table
+      }));
+    } catch (err) {
+      console.error("Failed to fetch all users:", err);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Get a single user by ID from Supabase
+  const getUserById = async (id: string): Promise<User | undefined> => {
+    if (!id) return undefined;
     
-    const newMessage: Message = {
-      id: `m${Date.now()}`,
-      senderId: user.id,
-      receiverId,
-      content,
-      timestamp: new Date(),
-      type,
-      fileUrl,
-    };
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error || !profile) {
+        console.error("Error fetching user by ID:", error);
+        return undefined;
+      }
+
+      return {
+        id: profile.id,
+        fullName: profile.full_name || 'Unknown User',
+        position: profile.position || '',
+        unit: profile.unit as UserUnit,
+        avatarUrl: profile.avatar_url,
+        email: '' // We don't expose email in profile table
+      };
+    } catch (err) {
+      console.error("Failed to fetch user by ID:", err);
+      return undefined;
+    }
+  };
+
+  // Get messages between current user and a specific user
+  const getMessages = async (userId: string): Promise<Message[]> => {
+    if (!user?.id || !userId) return [];
     
-    mockMessages[key].push(newMessage);
+    try {
+      setLoading(true);
+      
+      // Get messages where current user is sender or receiver and the other user is the specified userId
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error("Error fetching messages:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load messages. Please try again later.",
+          variant: "destructive",
+        });
+        return [];
+      }
+
+      // Map database messages to Message format
+      const formattedMessages: Message[] = await Promise.all(messages.map(async (msg) => {
+        const sender = await getUserById(msg.sender_id);
+        
+        return {
+          id: msg.id,
+          senderId: msg.sender_id,
+          receiverId: msg.receiver_id,
+          content: msg.content || '',
+          timestamp: new Date(msg.created_at),
+          type: msg.type as "text" | "voice" | "document" | "image",
+          fileUrl: msg.file_url,
+          sender,
+          is_read: msg.is_read
+        };
+      }));
+
+      return formattedMessages;
+    } catch (err) {
+      console.error("Failed to fetch messages:", err);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Send a message to another user
+  const sendMessage = async (
+    receiverId: string, 
+    content: string, 
+    type: Message['type'], 
+    fileUrl?: string
+  ): Promise<void> => {
+    if (!user?.id || !receiverId) return;
+
+    try {
+      let finalFileUrl = fileUrl;
+      
+      // Handle file upload if it's a file message and we have a File object
+      if ((type === 'image' || type === 'document' || type === 'voice') && !fileUrl && content) {
+        try {
+          // Convert base64 to File if necessary
+          const file = await fetch(content).then(res => res.blob());
+          const fileName = `${uuidv4()}.${type === 'image' ? 'png' : type === 'document' ? 'pdf' : 'mp3'}`;
+          const uploadedFile = new File([file], fileName, { type: file.type });
+          
+          // Upload to Supabase
+          finalFileUrl = await uploadFile('chat_media', `${user.id}/${fileName}`, uploadedFile);
+        } catch (err) {
+          console.error("Failed to upload file:", err);
+          toast({
+            title: "Error",
+            description: "Failed to upload file. Please try again later.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      // Insert message into database
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user.id,
+          receiver_id: receiverId,
+          content,
+          type,
+          file_url: finalFileUrl
+        });
+
+      if (error) {
+        console.error("Error sending message:", error);
+        toast({
+          title: "Error",
+          description: "Failed to send message. Please try again later.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Get all messages for the current user
+  const getAllMessages = async (): Promise<Message[]> => {
+    if (!user?.id) return [];
+    
+    try {
+      setLoading(true);
+      
+      // Get all messages where current user is sender or receiver
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Error fetching all messages:", error);
+        return [];
+      }
+
+      // Map database messages to Message format with sender info
+      const formattedMessages: Message[] = await Promise.all(messages.map(async (msg) => {
+        const sender = await getUserById(msg.sender_id);
+        
+        return {
+          id: msg.id,
+          senderId: msg.sender_id,
+          receiverId: msg.receiver_id,
+          content: msg.content || '',
+          timestamp: new Date(msg.created_at),
+          type: msg.type as "text" | "voice" | "document" | "image",
+          fileUrl: msg.file_url,
+          sender,
+          is_read: msg.is_read
+        };
+      }));
+
+      return formattedMessages;
+    } catch (err) {
+      console.error("Failed to fetch all messages:", err);
+      return [];
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -223,6 +303,7 @@ export const UsersProvider: React.FC<{ children: React.ReactNode }> = ({
         getMessages,
         sendMessage,
         getAllMessages,
+        loading
       }}
     >
       {children}
