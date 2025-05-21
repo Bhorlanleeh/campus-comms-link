@@ -110,6 +110,8 @@ const Signup = () => {
             position: formData.position,
             unit: formData.unit,
           },
+          // Set the redirect URL to the production URL or current origin to fix 504 error
+          emailRedirectTo: window.location.origin + '/login'
         },
       });
       
@@ -174,7 +176,7 @@ const Signup = () => {
             
             <div className="text-sm text-center text-gray-600">
               <p>Didn't receive an email? Check your spam folder or</p>
-              <Button variant="link" className="p-0 h-auto text-smartAudit-green" onClick={() => setIsSubmitting(false)}>
+              <Button variant="link" className="p-0 h-auto text-smartAudit-green" onClick={() => setShowConfirmation(false)}>
                 try using a different email address
               </Button>
             </div>

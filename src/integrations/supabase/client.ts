@@ -11,5 +11,20 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true, // Important for handling redirect URLs
+    flowType: 'pkce' // More secure flow for authentication
   }
 });
+
+// Add a global error handler for auth errors
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') {
+    // Clear any remaining auth state
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+  }
+});
+

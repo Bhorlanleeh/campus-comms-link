@@ -67,11 +67,12 @@ export const uploadFile = async (
     console.error("Error uploading file:", error);
     throw error;
   }
-  
-  // Get the public URL
+
+  // Get the public URL - ensure path is string and properly handled
+  const filePath = data?.path || path;
   const { data: publicURL } = supabase.storage
     .from(bucket)
-    .getPublicUrl(data?.path || path);
+    .getPublicUrl(filePath);
   
   console.log("File uploaded successfully. Public URL:", publicURL.publicUrl);
   return publicURL.publicUrl;
