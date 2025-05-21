@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -10,11 +10,51 @@ import { useUsers } from "@/context/UsersContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import Logo from "@/components/Logo";
+import { User } from "@/context/AuthContext";
 
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { getAllMessages, getUserById } = useUsers();
+  const [recentMessages, setRecentMessages] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!user?.id) return;
+      
+      try {
+        setLoading(true);
+        const messages = await getAllMessages();
+        
+        // Filter and sort messages
+        const userMessages = messages
+          .filter(msg => msg.receiverId === user?.id || msg.senderId === user?.id)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 3);
+        
+        // Get user information for each message
+        const messagesWithUsers = await Promise.all(
+          userMessages.map(async (message) => {
+            const otherUserId = message.senderId === user?.id ? message.receiverId : message.senderId;
+            const otherUser = await getUserById(otherUserId);
+            return {
+              ...message,
+              otherUser
+            };
+          })
+        );
+        
+        setRecentMessages(messagesWithUsers);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchMessages();
+  }, [getAllMessages, getUserById, user?.id]);
 
   const units = [
     {
@@ -43,12 +83,6 @@ const Dashboard = () => {
   const handleUnitClick = (unit: string) => {
     navigate(`/unit/${unit}`);
   };
-  
-  // Get recent messages
-  const recentMessages = getAllMessages()
-    .filter(msg => msg.receiverId === user?.id || msg.senderId === user?.id)
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 3);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -97,12 +131,14 @@ const Dashboard = () => {
           <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
           <Card>
             <CardContent className="p-4">
-              {recentMessages.length > 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-smartAudit-green"></div>
+                </div>
+              ) : recentMessages.length > 0 ? (
                 <div className="divide-y">
                   {recentMessages.map(message => {
-                    const otherUser = message.senderId === user?.id 
-                      ? getUserById(message.receiverId) 
-                      : getUserById(message.senderId);
+                    const otherUser = message.otherUser;
                     
                     return (
                       <div 
@@ -113,7 +149,7 @@ const Dashboard = () => {
                         <div className="flex items-center">
                           <Avatar className="h-8 w-8 mr-3">
                             <AvatarFallback className="bg-smartAudit-green text-white text-xs">
-                              {otherUser?.fullName.split(" ").map(name => name[0]).join("") || "?"}
+                              {otherUser?.fullName?.split(" ").map((name: string) => name[0]).join("") || "?"}
                             </AvatarFallback>
                           </Avatar>
                           

@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Logo from "@/components/Logo";
@@ -17,10 +17,24 @@ const DesktopNav = ({ activeTab }: DesktopNavProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { getAllMessages } = useUsers();
+  const [unreadCount, setUnreadCount] = useState(0);
   
   // Get unread notifications (in a real app, we'd filter by read status)
-  const messages = getAllMessages();
-  const unreadCount = messages.filter(msg => msg.receiverId === user?.id).length;
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const messages = await getAllMessages();
+        const unread = messages.filter(msg => msg.receiverId === user?.id && !msg.is_read);
+        setUnreadCount(unread.length);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      }
+    };
+    
+    fetchMessages();
+  }, [getAllMessages, user?.id]);
   
   const navItems = [
     { 
