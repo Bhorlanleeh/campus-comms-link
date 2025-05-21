@@ -27,4 +27,3 @@ supabase.auth.onAuthStateChange((event, session) => {
     });
   }
 });
-
