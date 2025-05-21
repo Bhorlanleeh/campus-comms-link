@@ -3,11 +3,12 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Logo from "@/components/Logo";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bell, MessageSquare, Search, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUsers } from "@/context/UsersContext";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DesktopNavProps {
   activeTab?: "chats" | "find" | "profile" | "notifications";
@@ -19,22 +20,55 @@ const DesktopNav = ({ activeTab }: DesktopNavProps) => {
   const { getAllMessages } = useUsers();
   const [unreadCount, setUnreadCount] = useState(0);
   
-  // Get unread notifications (in a real app, we'd filter by read status)
+  // Get unread notifications count
   useEffect(() => {
-    const fetchMessages = async () => {
+    const fetchUnreadCount = async () => {
       if (!user?.id) return;
       
       try {
-        const messages = await getAllMessages();
-        const unread = messages.filter(msg => msg.receiverId === user?.id && !msg.is_read);
-        setUnreadCount(unread.length);
+        // Get unread notifications count directly from Supabase
+        const { data: notifications, error } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_read', false);
+        
+        if (error) {
+          console.error("Error fetching notifications:", error);
+          return;
+        }
+        
+        // Set unread count based on actual notifications data
+        setUnreadCount(notifications?.length || 0);
+        
+        // Set up real-time subscription for new notifications
+        const subscription = supabase
+          .channel('notifications-changes')
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'notifications',
+              filter: `user_id=eq.${user.id}`
+            }, 
+            () => {
+              // Refresh unread count when notifications change
+              fetchUnreadCount();
+            }
+          )
+          .subscribe();
+          
+        return () => {
+          subscription.unsubscribe();
+        };
+        
       } catch (error) {
-        console.error("Error fetching messages:", error);
+        console.error("Error fetching unread count:", error);
       }
     };
     
-    fetchMessages();
-  }, [getAllMessages, user?.id]);
+    fetchUnreadCount();
+  }, [user?.id]);
   
   const navItems = [
     { 
@@ -99,9 +133,13 @@ const DesktopNav = ({ activeTab }: DesktopNavProps) => {
               className="h-8 w-8 cursor-pointer" 
               onClick={() => navigate("/profile")}
             >
-              <AvatarFallback className="bg-smartAudit-green text-white">
-                {user.fullName?.split(" ").map(name => name[0]).join("") || "U"}
-              </AvatarFallback>
+              {user.avatarUrl ? (
+                <AvatarImage src={user.avatarUrl} alt={user.fullName || ''} />
+              ) : (
+                <AvatarFallback className="bg-smartAudit-green text-white">
+                  {user.fullName?.split(" ").map(name => name[0]).join("") || "U"}
+                </AvatarFallback>
+              )}
             </Avatar>
           )}
         </div>

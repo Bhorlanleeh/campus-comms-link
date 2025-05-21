@@ -11,7 +11,7 @@ import DesktopNav from "@/components/DesktopNav";
 import { supabase } from "@/integrations/supabase/client";
 import { User, UserUnit } from "@/context/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 const FindPeople = () => {
   const { user } = useAuth();
@@ -21,6 +21,7 @@ const FindPeople = () => {
   const [realUsers, setRealUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uniqueUnits, setUniqueUnits] = useState<string[]>([]);
+  const { toast } = useToast();
   
   // Fetch real users from Supabase with improved error handling
   useEffect(() => {
@@ -68,6 +69,7 @@ const FindPeople = () => {
           console.log("Users set in state:", filteredUsers.length);
         } else {
           console.log("No profiles found in Supabase");
+          setRealUsers([]);
         }
       } catch (err) {
         console.error("Failed to fetch users:", err);
@@ -82,22 +84,30 @@ const FindPeople = () => {
     };
     
     fetchRealUsers();
-  }, [user?.id]);
+  }, [user?.id, toast]);
   
-  // Apply filters to users
-  const filteredUsers = realUsers.filter((u) => {
-    const matchesSearch = 
-      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      u.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.unit.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesUnit = unitFilter && unitFilter !== "all" ? u.unit === unitFilter : true;
-    
-    return matchesSearch && matchesUnit;
-  });
+  // Apply filters to users - fix handling of search term
+  const filteredUsers = React.useMemo(() => {
+    return realUsers.filter((u) => {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      
+      const matchesSearch = 
+        u.fullName.toLowerCase().includes(lowerSearchTerm) || 
+        u.position.toLowerCase().includes(lowerSearchTerm) ||
+        u.unit.toLowerCase().includes(lowerSearchTerm);
+      
+      const matchesUnit = unitFilter && unitFilter !== "all" ? u.unit === unitFilter : true;
+      
+      return matchesSearch && matchesUnit;
+    });
+  }, [realUsers, searchTerm, unitFilter]);
   
   const handleUserClick = (userId: string) => {
     navigate(`/chat/${userId}`);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
   };
 
   return (
@@ -111,18 +121,21 @@ const FindPeople = () => {
           <Input 
             placeholder="Search by name, position or unit..." 
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={handleSearchChange}
             className="pl-10"
           />
         </div>
         
-        <Select value={unitFilter} onValueChange={setUnitFilter}>
+        <Select 
+          value={unitFilter} 
+          onValueChange={(val) => setUnitFilter(val)}
+        >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Filter by unit" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Units</SelectItem>
-            {uniqueUnits.map(unit => (
+            {uniqueUnits.map((unit) => (
               <SelectItem key={unit} value={unit}>{unit}</SelectItem>
             ))}
           </SelectContent>
